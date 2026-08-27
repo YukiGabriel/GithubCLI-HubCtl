@@ -1,14 +1,15 @@
+import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-import requests
 import questionary
+import requests
 from questionary import Style
 
 from .config import CONFIG_FILE, delete_token, get_token, save_token
-from .github import GitHubClient
+from .github import GitHubClient, fetch_readme_public
 from . import ui
 
 console = ui.console
@@ -33,7 +34,6 @@ def _get_client_or_none(require: bool = True):
     token = get_token()
     if not token:
         if require:
-            console.print(ui.warning if False else "")
             ui.warning("Você não está autenticado.", title="🔒 Login necessário")
             choice = _safe_ask(questionary.confirm, "Deseja fazer login agora?", default=True, style=_get_style())
             if choice:
@@ -97,7 +97,7 @@ def handle_auth_status():
         with console.status("[bold #00D9FF]Buscando seu perfil...[/]", spinner="dots12"):
             user = client.get_user()
         console.print(ui.auth_panel(user))
-        src = "env GITHUB_TOKEN" if __import__("os").getenv("GITHUB_TOKEN") or __import__("os").getenv("GH_TOKEN") else str(CONFIG_FILE)
+        src = "env GITHUB_TOKEN" if os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN") else str(CONFIG_FILE)
         console.print(f"[dim]Token origem: {src}[/dim]")
     except Exception as e:
         ui.error(str(e))
@@ -262,6 +262,19 @@ def handle_repo_view(prefilled: str | None = None):
     console.print(ui.detail_panel(r))
     star_str = "⭐ Starred" if r.get("_starred") else "☆ Não starred"
     console.print(f"[dim]{star_str}  •  [dim]Use setas abaixo[/dim]")
+
+    # README.md bonito e organizado (em vez de só descrição curta)
+    readme_text = None
+    try:
+        if client:
+            with console.status(f"[dim]Buscando README.md...[/]", spinner="dots12"):
+                readme_text = client.get_readme(full_name)
+        else:
+            with console.status(f"[dim]Buscando README.md...[/]", spinner="dots12"):
+                readme_text = fetch_readme_public(full_name)
+    except Exception:
+        readme_text = None
+    console.print(ui.readme_panel(full_name, readme_text))
 
     # Menu dinâmico: Editar/Deletar só aparece se você é dono/admin (evita deletar repo público de terceiros)
     can_admin = _has_admin_access(client, r)

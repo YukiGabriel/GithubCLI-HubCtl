@@ -5,6 +5,7 @@ from rich.table import Table
 from rich.text import Text
 from rich.align import Align
 from rich.box import ROUNDED, HEAVY
+from rich.markdown import Markdown
 
 console = Console()
 
@@ -102,11 +103,18 @@ def get_effective_theme_name() -> str:
 THEME_NAME = get_effective_theme_name()
 THEME = THEME_DARK if THEME_NAME == "dark" else THEME_LIGHT
 
+def get_banner_sub() -> str:
+    return f"[dim {THEME['muted']}]gerencie seus repositórios com estilo • navegue com ↑/↓ • tema: {THEME_NAME} (auto)[/]"
+
+# Compatibilidade: mantém BANNER_SUB como variável dinâmica
+BANNER_SUB = get_banner_sub()
+
 def reload_theme():
     """Recarrega tema (usado após save_theme)"""
-    global THEME, THEME_NAME
+    global THEME, THEME_NAME, BANNER_SUB
     THEME_NAME = get_effective_theme_name()
     THEME = THEME_DARK if THEME_NAME == "dark" else THEME_LIGHT
+    BANNER_SUB = get_banner_sub()
     return THEME
 
 # Banner adaptativo
@@ -123,15 +131,13 @@ def get_banner() -> str:
 [bold {c2}] | |_| | | |_| | | | |_| | |_) || |___| |___ | | [/]
 [bold {c1}]  \____|_|\__|_| |_|\__,_|_.__/  \____|_____|___|[/]"""
 
-BANNER_SUB = f"[dim {THEME['muted']}]gerencie seus repositórios com estilo • navegue com ↑/↓ • tema: {THEME_NAME} (auto)[/]"
-
 def print_banner(clear: bool = False):
     if clear:
         console.clear()
     # recarrega tema caso env/config mudou
     reload_theme()
     banner = get_banner()
-    sub = f"[dim {THEME['muted']}]gerencie seus repositórios com estilo • navegue com ↑/↓ • tema: {THEME_NAME} (auto)[/]"
+    sub = get_banner_sub()
     console.print(Align.center(Text.from_markup(banner)))
     console.print(Align.center(Text.from_markup(sub)))
     console.print()
@@ -337,4 +343,35 @@ def auth_panel(user: dict) -> Panel:
         border_style=THEME["success"],
         box=ROUNDED,
         padding=(1,2)
+    )
+
+def readme_panel(repo_full_name: str, markdown_text: str | None, max_chars: int = 12000) -> Panel:
+    """Painel bonito e organizado para README.md — usa rich Markdown com tema claro/escuro"""
+    if not markdown_text or not markdown_text.strip():
+        return Panel(
+            "[dim]📄 Sem README.md neste repositório[/dim]\n[dim]Crie um README.md na raiz para documentar seu projeto[/dim]",
+            title=f"[bold {THEME['primary']}]📖 README — {repo_full_name}[/]",
+            border_style=THEME["muted"],
+            box=ROUNDED,
+            padding=(1,2),
+        )
+    # Trunca README muito grande para não poluir terminal (indica truncado)
+    truncated = False
+    text = markdown_text
+    if len(text) > max_chars:
+        text = text[:max_chars].rsplit("\n", 1)[0]
+        truncated = True
+    # Escolhe tema de código conforme fundo
+    code_theme = "monokai" if THEME_NAME == "dark" else "github"
+    md = Markdown(text, code_theme=code_theme, hyperlinks=True, inline_code_theme=code_theme)
+    title = f"[bold {THEME['primary']}]📖 README — {repo_full_name}[/]"
+    if truncated:
+        title += f" [dim](truncado em {max_chars} chars)[/]"
+    return Panel(
+        md,
+        title=title,
+        border_style=THEME["primary"],
+        box=ROUNDED,
+        padding=(1,2),
+        expand=False,
     )

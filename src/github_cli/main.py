@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 import sys
@@ -8,9 +9,14 @@ import requests
 import typer
 from rich.prompt import Confirm, Prompt
 
-from .config import delete_token, get_theme, get_token, require_token, save_theme, save_token, CONFIG_FILE
-from .github import GitHubClient
 from . import ui
+from .config import CONFIG_FILE, delete_token, get_theme, get_token, require_token, save_theme, save_token
+from .github import GitHubClient, fetch_readme_public
+
+try:
+    from . import __version__
+except ImportError:
+    __version__ = "0.2.1"
 
 app = typer.Typer(help="HubCtl - controle total do GitHub pelo terminal, interativo e lindo", rich_markup_mode="rich", no_args_is_help=False)
 auth_app = typer.Typer(help="Autenticação", rich_markup_mode="rich")
@@ -56,7 +62,7 @@ def auth_login(token: Optional[str] = typer.Option(None, "--token", "-t", help="
 def auth_logout(force: bool = typer.Option(False, "--yes", "-y", help="Não pedir confirmação")):
     """Remove o token salvo (logout)"""
     token = get_token()
-    env_token = __import__("os").getenv("GITHUB_TOKEN") or __import__("os").getenv("GH_TOKEN")
+    env_token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
     if not token and not CONFIG_FILE.exists():
         ui.warning("Você já não está logado (sem token salvo).", title="Aviso")
         if env_token:
@@ -86,7 +92,7 @@ def auth_status():
             user = client.get_user()
         console.print(ui.auth_panel(user))
         # mostra de onde veio o token
-        src = "env GITHUB_TOKEN" if __import__("os").getenv("GITHUB_TOKEN") or __import__("os").getenv("GH_TOKEN") else str(CONFIG_FILE)
+        src = "env GITHUB_TOKEN" if os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN") else str(CONFIG_FILE)
         console.print(f"[dim]Token origem: {src}[/dim]")
     except Exception as e:
         ui.error(str(e), title="Erro")
@@ -154,6 +160,20 @@ def repo_view(
         extra += f"[dim]🏠 {r['homepage']}[/]"
     if extra:
         console.print(extra)
+
+    # README.md bonito e organizado (em vez de só descrição)
+    readme_text = None
+    try:
+        if resolved:
+            _c = GitHubClient(resolved)
+            with console.status(f"[dim]Buscando README.md...[/]", spinner="dots12"):
+                readme_text = _c.get_readme(full_name)
+        else:
+            with console.status(f"[dim]Buscando README.md...[/]", spinner="dots12"):
+                readme_text = fetch_readme_public(full_name)
+    except Exception:
+        readme_text = None
+    console.print(ui.readme_panel(full_name, readme_text))
     console.print(f"\n[dim]Clone: [cyan]hubctl repo clone {full_name}[/]  •  Fork: [cyan]hubctl repo fork {full_name}[/]  •  Star: [cyan]hubctl repo star {full_name}[/][/dim]")
 
 @repo_app.command("create")
@@ -695,7 +715,6 @@ def config_theme(
     theme: Optional[str] = typer.Argument(None, help="dark / light / auto (vazio mostra atual)"),
 ):
     """Configura tema (auto detecta claro/escuro). Use GHC_THEME env para override."""
-    import os
     current = get_theme()
     effective = ui.get_effective_theme_name()
     if theme is None:
@@ -730,7 +749,7 @@ def config_show():
     from pathlib import Path
     import configparser
     ui.print_banner()
-    console.print(f"[dim]Arquivo: {CONFIG_FILE}  (GHC_THEME env: {__import__('os').getenv('GHC_THEME','-')})[/dim]\n")
+    console.print(f"[dim]Arquivo: {CONFIG_FILE}  (GHC_THEME env: {os.getenv('GHC_THEME','-')})[/dim]\n")
     if not CONFIG_FILE.exists():
         ui.warning("Nenhum config salvo ainda.", title="Vazio")
         return
@@ -757,13 +776,28 @@ def interactive():
     run_interactive()
 
 
+def _version_callback(value: bool):
+    if value:
+        console.print(f"hubctl [bold {ui.THEME['primary']}]{__version__}[/]")
+        raise typer.Exit(0)
+
+
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context):
+def main(
+    ctx: typer.Context,
+    version: Optional[bool] = typer.Option(
+        None,
+        "--version",
+        "-v",
+        help="Mostra versão e sai",
+        callback=_version_callback,
+        is_eager=True,
+    ),
+):
     # Se rodar `hubctl` sem nenhum subcomando, entra no modo interativo
     # mas respeita --help e completion
     if ctx.invoked_subcommand is None:
-        import sys
-        if any(x in sys.argv for x in ("--help", "-h", "--install-completion", "--show-completion", "-i")):
+        if any(x in sys.argv for x in ("--help", "-h", "--install-completion", "--show-completion", "-i", "--version", "-v")):
             return
         # também verifica se --help foi passado via contexto
         try:

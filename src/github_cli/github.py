@@ -1,3 +1,5 @@
+import base64
+
 import requests
 from typing import Any
 
@@ -14,26 +16,26 @@ class GitHubClient:
         })
 
     def _get(self, path: str, params: dict | None = None) -> Any:
-        r = self.session.get(f"{API_BASE}{path}", params=params)
+        r = self.session.get(f"{API_BASE}{path}", params=params, timeout=15)
         r.raise_for_status()
         return r.json()
 
     def _post(self, path: str, json: dict | None = None) -> Any:
-        r = self.session.post(f"{API_BASE}{path}", json=json)
+        r = self.session.post(f"{API_BASE}{path}", json=json, timeout=15)
         r.raise_for_status()
         return r.json()
 
     def _delete(self, path: str) -> None:
-        r = self.session.delete(f"{API_BASE}{path}")
+        r = self.session.delete(f"{API_BASE}{path}", timeout=15)
         r.raise_for_status()
 
     def _patch(self, path: str, json: dict | None = None) -> Any:
-        r = self.session.patch(f"{API_BASE}{path}", json=json)
+        r = self.session.patch(f"{API_BASE}{path}", json=json, timeout=15)
         r.raise_for_status()
         return r.json()
 
     def _put(self, path: str) -> Any:
-        r = self.session.put(f"{API_BASE}{path}")
+        r = self.session.put(f"{API_BASE}{path}", timeout=15)
         r.raise_for_status()
         return r.json() if r.text else None
 
@@ -66,7 +68,7 @@ class GitHubClient:
         self._delete(f"/user/starred/{full_name}")
 
     def check_starred(self, full_name: str) -> bool:
-        r = self.session.get(f"{API_BASE}/user/starred/{full_name}")
+        r = self.session.get(f"{API_BASE}/user/starred/{full_name}", timeout=15)
         if r.status_code == 204:
             return True
         if r.status_code == 404:
@@ -80,6 +82,31 @@ class GitHubClient:
 
     def search_repos(self, query: str, limit: int = 20, sort: str = "stars"):
         return self._get("/search/repositories", params={"q": query, "per_page": limit, "sort": sort})
+
+    def get_readme(self, full_name: str) -> str | None:
+        """Busca README.md do repo e retorna markdown raw, ou None se não existir"""
+        try:
+            r = self.session.get(
+                f"{API_BASE}/repos/{full_name}/readme",
+                headers={"Accept": "application/vnd.github.raw"},
+                timeout=15,
+            )
+            if r.status_code == 404:
+                return None
+            ctype = r.headers.get("Content-Type", "")
+            if "application/json" in ctype:
+                data = r.json()
+                if data.get("encoding") == "base64" and "content" in data:
+                    return base64.b64decode(data["content"]).decode("utf-8", errors="replace")
+                return None
+            r.raise_for_status()
+            return r.text
+        except requests.HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                return None
+            return None
+        except Exception:
+            return None
 
     # Issues
     def list_issues(self, full_name: str, state: str = "open", limit: int = 20):
@@ -114,3 +141,30 @@ class GitHubClient:
 
     def list_starred(self, limit: int = 20):
         return self._get("/user/starred", params={"per_page": limit})
+
+
+def fetch_readme_public(full_name: str, token: str | None = None) -> str | None:
+    """Helper anônimo/público: busca README sem precisar de GitHubClient (usado quando sem token)"""
+    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        h_raw = dict(headers)
+        h_raw["Accept"] = "application/vnd.github.raw"
+        r = requests.get(f"{API_BASE}/repos/{full_name}/readme", headers=h_raw, timeout=15)
+        if r.status_code == 404:
+            return None
+        ctype = r.headers.get("Content-Type", "")
+        if "application/json" in ctype:
+            data = r.json()
+            if data.get("encoding") == "base64" and "content" in data:
+                return base64.b64decode(data["content"]).decode("utf-8", errors="replace")
+            return None
+        r.raise_for_status()
+        return r.text
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code == 404:
+            return None
+        return None
+    except Exception:
+        return None
