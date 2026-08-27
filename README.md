@@ -15,10 +15,11 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Typer](https://img.shields.io/badge/typer-0.27-black?style=flat-square)](https://typer.tiangolo.com)
 [![Rich](https://img.shields.io/badge/rich-15.0-00D9FF?style=flat-square)](https://rich.readthedocs.io)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)](#-compatibilidade)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg?style=flat-square)](https://github.com/psf/black)
 
-[Instalação](#-instalação) • [Quickstart](#-quickstart) • [Comandos](#-comandos) • [Modo Interativo](#-modo-interativo) • [Tema](#-tema-dinâmico)
+[Instalação](#-instalação) • [Quickstart](#-quickstart) • [Comandos](#-comandos) • [Modo Interativo](#-modo-interativo) • [Compatibilidade](#-compatibilidade) • [Tema](#-tema-dinâmico)
 
 </div>
 
@@ -37,40 +38,89 @@ HubCtl é uma CLI em Python que traz o GitHub pro seu terminal sem dor. Esqueça
 | **🐛 Issues** | list / view / create / close (com labels) |
 | **🔀 PRs** | list / view / create (draft, head/base) |
 | **🎨 Tema dinâmico** | auto detecta fundo claro/escuro (`COLORFGBG`), `hubctl config theme light/dark/auto` |
-| **🔑 Auth simples** | PAT via prompt, `GITHUB_TOKEN` env ou `~/.config/hubctl/config.ini` (`chmod 600`) |
+| **🖥️ Cross-OS** | Windows / macOS / Linux via `platformdirs` — mesmo `pip install hubctl` |
+| **🔑 Auth simples** | PAT via prompt, `GITHUB_TOKEN` env ou `config.ini` (`chmod 600` no Unix, ignorado no Win) |
 | **📋 Anônimo ok** | `view/search/clone` público funciona sem token |
+
+---
+
+## 🖥️ Compatibilidade
+
+**HubCtl roda em qualquer sistema operacional:** Windows, macOS e Linux. 100% Python, sem binários nativos.
+
+| OS | Terminal testado | Instalação | Config |
+|----|------------------|------------|--------|
+| **Windows** 11/10 | PowerShell 7, Windows Terminal, CMD | `pip` / `pipx` / `uv` | `%APPDATA%\hubctl\config.ini` via `platformdirs` |
+| **macOS** 13+ | Terminal.app, iTerm2, Warp | `pip` / `brew` (python) | `~/Library/Application Support/hubctl/config.ini` ou `~/.config/hubctl/` (XDG) |
+| **Linux** | bash, zsh, fish | `pip` / `uv` | `~/.config/hubctl/config.ini` (`$XDG_CONFIG_HOME`) |
+
+* **`platformdirs>=3.0` + fallback manual** garante pasta certa em cada OS (`src/github_cli/config.py:7` → `_get_config_dir()`).
+* **`os.chmod 600` com `try/except`** — funciona no Linux/macOS e ignora graciosamente no Windows.
+* **`questionary` + `rich`** usam `prompt_toolkit` com suporte `win32` → setas ↑/↓ funcionam no PowerShell/CMD.
+* **Migração automática:** se você veio do `github-cli` (`~/.config/github-cli/config.ini`), HubCtl copia pra nova pasta na primeira execução.
 
 ---
 
 ## 📦 Instalação
 
-### Via pip (recomendado)
+### Via pip (qualquer OS)
 
 ```bash
+# Windows / macOS / Linux — mesmo comando
 pip install hubctl
-# ou
+# ou isolado (recomendado)
 pipx install hubctl
-# ou com uv
+# ou ultra-rápido
 uv pip install hubctl
+
+# verifique
+hubctl --help
+hubctl config show   # mostra onde salvou o config no seu OS
 ```
 
-### Do código fonte
+### Do código fonte (qualquer OS)
 
 ```bash
-git clone https://github.com/seu-usuario/hubctl.git
+git clone https://github.com/yukigabriel/hubctl.git
 cd hubctl
 pip install -e .
 
-# fish
-source .venv/bin/activate.fish
-
-# bash/zsh
+# Ative o venv (escolha seu shell/OS)
+# Linux/macOS bash/zsh
 source .venv/bin/activate
+# Linux/macOS fish
+source .venv/bin/activate.fish
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+# Windows CMD
+.venv\Scripts\activate.bat
 ```
 
 > **Alias:** `ghc` continua funcionando por compatibilidade, mas o recomendado é `hubctl`.
 
-**Requisitos:** Python 3.9+, `git` no PATH para `clone`.
+**Requisitos:** Python 3.9+ (3.9, 3.10, 3.11, 3.12 testados), `git` no PATH para `hubctl repo clone`.
+
+<details>
+<summary>🐍 Windows: detalhes Python</summary>
+
+* Instale Python de https://python.org (marque “Add to PATH”) ou `winget install Python.Python.3.12`
+* No PowerShell pode precisar `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` pra ativar venv
+* Se `hubctl` não for encontrado, feche e reabra o terminal ou adicione `%USERPROFILE%\AppData\Roaming\Python\Scripts` ao PATH
+</details>
+
+<details>
+<summary>🍎 macOS: detalhes</summary>
+
+* `brew install python@3.12 git` e depois `pip install hubctl`
+* Config fica em `~/Library/Application Support/hubctl/config.ini` (ou `~/.config/hubctl/` se `XDG_CONFIG_HOME` estiver setado)
+</details>
+
+<details>
+<summary>🐧 Linux: detalhes</summary>
+
+* `sudo apt install python3-pip git` (Debian/Ubuntu) ou `sudo pacman -S python-pip git` (Arch)
+* `pip install --user hubctl` se não usar pipx/uv
+</details>
 
 ---
 
@@ -190,8 +240,8 @@ Todas as views públicas (`view`, `search`, `issue/pr list/view`, `clone` públi
 Seu terminal é branco e as letras somem? HubCtl detecta sozinho.
 
 * **Auto (padrão):** lê `COLORFGBG` (`0;15` = fundo branco → light, `15;0` = fundo preto → dark). Fallback: `dark`.
-* **Manual:** `hubctl config theme light` salva em `~/.config/github-cli/config.ini` `[ui] theme = light`.
-* **Env:** `GHC_THEME=light|dark|auto` tem prioridade máxima.
+* **Manual:** `hubctl config theme light` salva em `config.ini` `[ui] theme = light` (caminho varia por OS, veja `hubctl config show`).
+* **Env:** `GHC_THEME` ou `HUBCTL_THEME` (`light|dark|auto`) tem prioridade máxima (útil no Windows: `set HUBCTL_THEME=light`).
 
 | Tema | Cores | Pra onde |
 |------|-------|----------|
@@ -211,11 +261,18 @@ GHC_THEME=light hubctl
 
 ## ⚙️ Configuração
 
-```
-~/.config/github-cli/config.ini  (hubctl mantém compat com github-cli)
-```
+HubCtl salva tudo num único `config.ini` multiplataforma:
+
+| OS | Caminho |
+|----|---------|
+| **Linux** | `~/.config/hubctl/config.ini` (`$XDG_CONFIG_HOME/hubctl/` se setado) |
+| **macOS** | `~/Library/Application Support/hubctl/config.ini` ou `~/.config/hubctl/` |
+| **Windows** | `%APPDATA%\hubctl\config.ini` (ex: `C:\Users\Você\AppData\Roaming\hubctl\config.ini`) |
+
+Compatibilidade: na primeira execução HubCtl migra automaticamente de `~/.config/github-cli/config.ini` (legado) pra nova pasta.
 
 ```ini
+# exemplo (~/.config/hubctl/config.ini no Linux)
 [auth]
 token = ghp_xxx
 
@@ -223,9 +280,10 @@ token = ghp_xxx
 theme = auto  # dark | light | auto
 ```
 
-* `chmod 600` automático
+* `chmod 600` no Linux/macOS, ignorado no Windows (sem erro)
 * Prioridade token: `--token` > `GITHUB_TOKEN`/`GH_TOKEN` env > `config.ini`
 * `hubctl auth logout` preserva `[ui]` (só remove `token`)
+* `hubctl config show` mostra o caminho real no seu OS + token mascarado `ghp_***`
 
 ---
 
@@ -250,7 +308,7 @@ src/github_cli/
   interactive.py  # TUI completo com setas + style adaptativo
 ```
 
-Stack: `typer[all]` + `rich` + `requests` + `questionary`
+Stack: `typer[all]` + `rich` + `requests` + `questionary` + `platformdirs` (config multiplataforma)
 
 ---
 

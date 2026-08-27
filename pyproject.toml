@@ -1,0 +1,49 @@
+[project]
+name = "hubctl"
+version = "0.1.0"
+description = "HubCtl - controle total do GitHub pelo terminal, interativo e lindo"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Yuki Gabriel", email = "yukigabriell@gmail.com" }]
+maintainers = [{ name = "Yuki Gabriel", email = "yukigabriell@gmail.com" }]
+keywords = ["github", "cli", "tui", "git", "hub"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Version Control :: Git",
+]
+dependencies = [
+    "typer[all]>=0.12.0",
+    "rich>=13.0.0",
+    "requests>=2.31.0",
+    "questionary>=2.1.0",
+    "platformdirs>=3.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yukigabriel/hubctl"
+Repository = "https://github.com/yukigabriel/hubctl"
+Issues = "https://github.com/yukigabriel/hubctl/issues"
+
+[project.scripts]
+hubctl = "github_cli.main:app"
+ghc = "github_cli.main:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/github_cli"]

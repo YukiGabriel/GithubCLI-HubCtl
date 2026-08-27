@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+.venv/
+venv/
+env/
+.env
+.env.local
+.env.*.local
+
+# Build
+dist/
+build/
+*.egg-info/
+*.whl
+*.egg
+.eggs/
+hatch/
+
+# Testes / coverage
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# HubCtl - NUNCA commitar credenciais
+config.ini
+*.token
+*.pem
+*.key
+
+# Logs
+*.log
