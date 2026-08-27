@@ -1,6 +1,6 @@
 [project]
 name = "hubctl"
-version = "0.1.0"
+version = "0.2.0"
 description = "HubCtl - controle total do GitHub pelo terminal, interativo e lindo"
 readme = "README.md"
 requires-python = ">=3.9"

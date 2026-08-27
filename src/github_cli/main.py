@@ -384,21 +384,30 @@ def repo_edit(
 
 @repo_app.command("search")
 def repo_search(
-    query: str = typer.Argument(..., help="ex: 'language:python stars:>1000 cli'"),
+    query: str = typer.Argument(None, help="Termos da busca (ex: 'cli language:python' ou vazio se usar --user)"),
     limit: int = typer.Option(10, "--limit", "-n", help="Qtd resultados"),
+    user: Optional[str] = typer.Option(None, "--user", "-u", help="Filtrar por usuário/org (ex: octocat, yukigabriel)"),
     token: Optional[str] = typer.Option(None, "--token"),
 ):
-    """Busca repositórios no GitHub (search)"""
+    """Busca repositórios no GitHub (search) — agora com filtro por usuário e opção de clonar"""
+    # monta query efetiva: user:xxx + termos
+    effective_query = (query.strip() if query else "")
+    if user and user.strip():
+        user = user.strip()
+        effective_query = f"user:{user} {effective_query}".strip()
+    if not effective_query:
+        ui.error("Informe um termo de busca ou use --user para listar repos de um usuário. Ex: hubctl repo search --user octocat --limit 5", title="Busca vazia")
+        raise typer.Exit(1)
     # search funciona anônimo mas melhor autenticado (rate limit maior)
     resolved = get_token(token)
     try:
         if resolved:
             client = GitHubClient(resolved)
-            with console.status(f"[bold #00D9FF]Buscando '{query}'...[/]", spinner="dots12"):
-                result = client.search_repos(query, limit=limit)
+            with console.status(f"[bold #00D9FF]Buscando '{effective_query}'...[/]", spinner="dots12"):
+                result = client.search_repos(effective_query, limit=limit)
         else:
-            with console.status(f"[dim]Buscando '{query}'...[/]", spinner="dots12"):
-                resp = requests.get("https://api.github.com/search/repositories", params={"q": query, "per_page": limit}, headers={"Accept": "application/vnd.github+json"})
+            with console.status(f"[dim]Buscando '{effective_query}'...[/]", spinner="dots12"):
+                resp = requests.get("https://api.github.com/search/repositories", params={"q": effective_query, "per_page": limit}, headers={"Accept": "application/vnd.github+json"})
                 resp.raise_for_status()
                 result = resp.json()
     except Exception as e:
@@ -408,13 +417,13 @@ def repo_search(
     items = result.get("items", [])
     total = result.get("total_count", len(items))
     if not items:
-        ui.warning(f"Nenhum resultado para '{query}'", title="Vazio")
+        ui.warning(f"Nenhum resultado para '{effective_query}'", title="Vazio")
         return
 
     # transforma items no formato de repo_table
     # search já traz stargazers_count, etc mas falta topics? ok
-    console.print(ui.repo_table(f"Busca: '{query}' • {total} resultados (mostrando {len(items)})", items))
-    console.print(f"[dim]Dica: hubctl repo view usuario/repo  •  hubctl repo clone usuario/repo[/dim]")
+    console.print(ui.repo_table(f"Busca: '{effective_query}' • {total} resultados (mostrando {len(items)})", items))
+    console.print(f"[dim]Dica: hubctl repo view usuario/repo  •  hubctl repo clone usuario/repo  •  use --user para filtrar por pessoa[/dim]")
 
 # ---------- ISSUE ----------
 @issue_app.command("list")

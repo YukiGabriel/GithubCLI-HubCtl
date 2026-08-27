@@ -155,6 +155,24 @@ def _pick_repo_or_input(client):
             pass
     return _safe_ask(questionary.text, "Digite usuario/repo (ex: octocat/Hello-World):", style=_get_style())
 
+def _has_admin_access(client, repo: dict) -> bool:
+    """True se o usuário autenticado tem permissão admin (dono) no repo. Usa permissions se vier da API, senão compara owner vs /user"""
+    if not client:
+        return False
+    perms = repo.get("permissions")
+    if perms is not None:
+        # GitHub retorna {"admin": true/false, ...} quando autenticado
+        return bool(perms.get("admin"))
+    # fallback: compara login do owner com usuário logado (evita mostrar Deletar em repo público de terceiros)
+    try:
+        owner_login = repo.get("owner", {}).get("login")
+        if not owner_login:
+            owner_login = repo.get("full_name", "").split("/")[0]
+        user = client.get_user()
+        return user.get("login", "").lower() == owner_login.lower()
+    except Exception:
+        return False
+
 # ---------- REPO ----------
 def handle_repo_list():
     client = _get_client_or_none()
@@ -245,7 +263,17 @@ def handle_repo_view(prefilled: str | None = None):
     star_str = "⭐ Starred" if r.get("_starred") else "☆ Não starred"
     console.print(f"[dim]{star_str}  •  [dim]Use setas abaixo[/dim]")
 
-    choices = ["↩️  Voltar", "📥 Clonar", "🍴 Fork", "⭐ Toggle Star", "✏️  Editar", "🐛 Issues", "🔀 PRs", "🗑️  Deletar"]
+    # Menu dinâmico: Editar/Deletar só aparece se você é dono/admin (evita deletar repo público de terceiros)
+    can_admin = _has_admin_access(client, r)
+    if not can_admin and client:
+        # dica sutil quando não é dono
+        console.print(f"[dim]ℹ {r.get('owner',{}).get('login','')} / permissões: leitura — Editar/Deletar ocultos (só dono vê)[/dim]")
+    choices = ["↩️  Voltar", "📥 Clonar", "🍴 Fork", "⭐ Toggle Star"]
+    if can_admin:
+        choices.append("✏️  Editar")
+    choices.extend(["🐛 Issues", "🔀 PRs"])
+    if can_admin:
+        choices.append("🗑️  Deletar")
     action = _safe_ask(questionary.select, f"Ações para {full_name}:", choices=choices, style=_get_style())
     if action == "📥 Clonar":
         handle_repo_clone(prefilled=full_name)
@@ -511,19 +539,36 @@ def handle_repo_edit(prefilled: str | None = None):
 
 def handle_repo_search():
     token = get_token()
-    query = _safe_ask(questionary.text, "🔍 Buscar repos (ex: 'language:python stars:>5000 cli'):", style=_get_style())
-    if not query:
+    # Fluxo melhorado: pergunta usuário/org opcional + termos
+    user_filter = _safe_ask(questionary.text, "👤 Filtrar por usuário/org? (ex: octocat, deixe vazio para busca global):", style=_get_style())
+    # None = Ctrl+C
+    if user_filter is None:
         _pause()
         return
+    user_filter = user_filter.strip()
+    query = _safe_ask(questionary.text, "🔍 Termos da busca (ex: 'cli language:python', vazio lista tudo do usuário se filtrou):", style=_get_style())
+    if query is None:
+        _pause()
+        return
+    query = query.strip() if query else ""
+    effective_query = query
+    if user_filter:
+        effective_query = f"user:{user_filter} {query}".strip()
+    if not effective_query:
+        ui.warning("Informe um termo de busca ou um usuário para filtrar. Ex: user:octocat ou 'cli' + user:octocat")
+        _pause()
+        return
+    if user_filter:
+        console.print(f"[dim]🔎 Busca: '{effective_query}' (filtro usuário: {user_filter})[/dim]")
     limit = _choose_limit(10)
     try:
         if token:
             client = GitHubClient(token)
-            with console.status(f"[bold #00D9FF]Buscando '{query}'...[/]", spinner="dots12"):
-                result = client.search_repos(query, limit=limit)
+            with console.status(f"[bold #00D9FF]Buscando '{effective_query}'...[/]", spinner="dots12"):
+                result = client.search_repos(effective_query, limit=limit)
         else:
-            with console.status(f"[dim]Buscando '{query}'...[/]", spinner="dots12"):
-                resp = requests.get("https://api.github.com/search/repositories", params={"q": query, "per_page": limit}, headers={"Accept": "application/vnd.github+json"})
+            with console.status(f"[dim]Buscando '{effective_query}'...[/]", spinner="dots12"):
+                resp = requests.get("https://api.github.com/search/repositories", params={"q": effective_query, "per_page": limit}, headers={"Accept": "application/vnd.github+json"})
                 resp.raise_for_status()
                 result = resp.json()
     except Exception as e:
@@ -533,18 +578,19 @@ def handle_repo_search():
     items = result.get("items", [])
     total = result.get("total_count", len(items))
     if not items:
-        ui.warning(f"Nenhum resultado para '{query}'")
+        ui.warning(f"Nenhum resultado para '{effective_query}'")
         _pause()
         return
-    console.print(ui.repo_table(f"Busca: '{query}' • {total} resultados (mostrando {len(items)})", items))
-    action = _safe_ask(questionary.select, "O que fazer?",
-        choices=["↩️  Voltar", "👁️  Ver detalhes", "📥 Clonar", "🍴 Fork", "⭐ Star"],
+    console.print(ui.repo_table(f"Busca: '{effective_query}' • {total} resultados (mostrando {len(items)})", items))
+    # Fluxo direto: mostra info + opção clonar (via view)
+    action = _safe_ask(questionary.select, "O que fazer? (Ver detalhes já mostra info + opção Clonar)",
+        choices=["↩️  Voltar", "👁️  Ver detalhes (+ clonar/fork/star)", "📥 Clonar direto", "🍴 Fork", "⭐ Star"],
         style=_get_style())
-    if action == "👁️  Ver detalhes":
+    if action == "👁️  Ver detalhes (+ clonar/fork/star)":
         sel = _select_repo_interactively(items)
         if sel: handle_repo_view(prefilled=sel)
         else: _pause()
-    elif action == "📥 Clonar":
+    elif action == "📥 Clonar direto":
         sel = _select_repo_interactively(items)
         if sel: handle_repo_clone(prefilled=sel)
         else: _pause()
