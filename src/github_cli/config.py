@@ -182,3 +182,55 @@ def save_theme(theme: str):
         os.chmod(CONFIG_FILE, 0o600)
     except Exception:
         pass
+
+# ---------- Recents (últimos repos acessados) ----------
+def get_recents(limit: int = 10) -> list[str]:
+    _migrate_legacy_if_needed()
+    for p in (CONFIG_FILE, _LEGACY_FILE, _FALLBACK_LEGACY):
+        if p.exists():
+            cfg = configparser.ConfigParser()
+            cfg.read(p)
+            if "recent" in cfg and "repos" in cfg["recent"]:
+                raw = cfg["recent"]["repos"]
+                items = [s.strip() for s in raw.split(",") if s.strip()]
+                return items[:limit]
+    return []
+
+def save_recent(full_name: str, limit: int = 10):
+    full_name = full_name.strip()
+    if not full_name or "/" not in full_name:
+        return
+    _migrate_legacy_if_needed()
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    cfg = configparser.ConfigParser()
+    if CONFIG_FILE.exists():
+        cfg.read(CONFIG_FILE)
+    recents = get_recents(limit=50)
+    # move to front, dedup
+    recents = [r for r in recents if r.lower() != full_name.lower()]
+    recents.insert(0, full_name)
+    recents = recents[:limit]
+    if "recent" not in cfg:
+        cfg["recent"] = {}
+    cfg["recent"]["repos"] = ", ".join(recents)
+    with open(CONFIG_FILE, "w") as f:
+        cfg.write(f)
+    try:
+        os.chmod(CONFIG_FILE, 0o600)
+    except Exception:
+        pass
+
+def clear_recents():
+    for p in (CONFIG_FILE, _LEGACY_FILE, _FALLBACK_LEGACY):
+        if p.exists():
+            cfg = configparser.ConfigParser()
+            cfg.read(p)
+            if "recent" in cfg:
+                del cfg["recent"]
+                with open(p, "w") as f:
+                    cfg.write(f)
+                try:
+                    os.chmod(p, 0o600)
+                except Exception:
+                    pass
+            break
